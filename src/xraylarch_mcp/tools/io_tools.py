@@ -7,20 +7,20 @@ from typing import Any
 
 import numpy as np
 from larch import Group
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from ..session import SessionManager
 from ..util import format_error, summarize_group
 
 
-def _get_session(ctx: Any) -> SessionManager:
+def _get_session(ctx: Context) -> SessionManager:
     return ctx.request_context.lifespan_context["session"]
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool(name="larch_load_spectrum")
     def larch_load_spectrum(
-        ctx: Any,
+        ctx: Context,
         filepath: str,
         format: str = "auto",
         group_id: str | None = None,
@@ -171,7 +171,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_read_athena_project")
     def larch_read_athena_project(
-        ctx: Any,
+        ctx: Context,
         filepath: str,
         load_group: str | None = None,
         load_all: bool = False,
@@ -254,7 +254,7 @@ def register(mcp: FastMCP) -> None:
             return {"error": format_error("larch_read_athena_project", e)}
 
     @mcp.tool(name="larch_list_groups")
-    def larch_list_groups(ctx: Any) -> dict:
+    def larch_list_groups(ctx: Context) -> dict:
         """List all loaded spectrum groups with summary info.
 
         Returns:
@@ -265,7 +265,7 @@ def register(mcp: FastMCP) -> None:
         return {"groups": groups, "count": len(groups)}
 
     @mcp.tool(name="larch_inspect_group")
-    def larch_inspect_group(ctx: Any, group_id: str) -> dict:
+    def larch_inspect_group(ctx: Context, group_id: str) -> dict:
         """Inspect a loaded group's attributes in detail.
 
         Args:
@@ -282,7 +282,7 @@ def register(mcp: FastMCP) -> None:
             return {"error": str(e)}
 
     @mcp.tool(name="larch_remove_group")
-    def larch_remove_group(ctx: Any, group_id: str) -> dict:
+    def larch_remove_group(ctx: Context, group_id: str) -> dict:
         """Remove a loaded group to free memory.
 
         Args:

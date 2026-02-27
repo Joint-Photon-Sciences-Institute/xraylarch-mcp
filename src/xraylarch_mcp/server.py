@@ -8,7 +8,7 @@ import traceback
 from contextlib import asynccontextmanager
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from .session import SessionManager
 
@@ -33,13 +33,13 @@ mcp = FastMCP(
 )
 
 
-def _get_session(ctx: Any) -> SessionManager:
+def _get_session(ctx: Context) -> SessionManager:
     return ctx.request_context.lifespan_context["session"]
 
 
 # Register the escape-hatch tool directly on the server
 @mcp.tool(name="larch_run_code")
-def larch_run_code(ctx: Any, code: str) -> dict:
+def larch_run_code(ctx: Context, code: str) -> dict:
     """Execute arbitrary Python code in the larch session context.
 
     The session manager, all loaded groups, numpy, and matplotlib are available.

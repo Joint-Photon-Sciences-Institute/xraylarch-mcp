@@ -5,20 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from ..session import SessionManager
 from ..util import format_error
 
 
-def _get_session(ctx: Any) -> SessionManager:
+def _get_session(ctx: Context) -> SessionManager:
     return ctx.request_context.lifespan_context["session"]
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool(name="larch_lcf")
     def larch_lcf(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         standard_group_ids: list[str],
         xmin: float = -float("inf"),
@@ -96,7 +96,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_pca")
     def larch_pca(
-        ctx: Any,
+        ctx: Context,
         group_ids: list[str],
         arrayname: str = "norm",
         xmin: float = -float("inf"),
@@ -158,7 +158,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_feffit")
     def larch_feffit(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         paths: list[dict],
         kmin: float = 2.0,
@@ -292,7 +292,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_peak_fit")
     def larch_peak_fit(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         xarray: str = "energy",
         yarray: str = "norm",

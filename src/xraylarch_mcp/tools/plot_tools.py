@@ -10,12 +10,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from ..session import SessionManager
 
 
-def _get_session(ctx: Any) -> SessionManager:
+def _get_session(ctx: Context) -> SessionManager:
     return ctx.request_context.lifespan_context["session"]
 
 
@@ -90,7 +90,7 @@ def _get_plot_data(group: Any, plot_type: str, kweight: int = 2) -> tuple:
 def register(mcp: FastMCP) -> None:
     @mcp.tool(name="larch_plot")
     def larch_plot(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         plot_type: str = "norm",
         kweight: int = 2,

@@ -6,20 +6,20 @@ from typing import Any
 
 import numpy as np
 from larch import Group
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from ..session import SessionManager
 from ..util import format_error
 
 
-def _get_session(ctx: Any) -> SessionManager:
+def _get_session(ctx: Context) -> SessionManager:
     return ctx.request_context.lifespan_context["session"]
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool(name="larch_smooth")
     def larch_smooth(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         array_name: str = "mu",
         sigma: float = 1.0,
@@ -77,7 +77,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_deriv")
     def larch_deriv(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         array_name: str = "mu",
         output_name: str | None = None,
@@ -118,7 +118,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_interpolate")
     def larch_interpolate(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         new_energy_min: float | None = None,
         new_energy_max: float | None = None,
@@ -180,7 +180,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_merge_groups")
     def larch_merge_groups(
-        ctx: Any,
+        ctx: Context,
         group_ids: list[str],
         output_id: str = "merged",
         xarray: str = "energy",
@@ -237,7 +237,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_deglitch")
     def larch_deglitch(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         energy_points: list[float],
         tolerance: float = 0.5,

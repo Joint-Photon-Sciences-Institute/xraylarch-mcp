@@ -5,20 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from ..session import SessionManager
 from ..util import format_error
 
 
-def _get_session(ctx: Any) -> SessionManager:
+def _get_session(ctx: Context) -> SessionManager:
     return ctx.request_context.lifespan_context["session"]
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool(name="larch_normalize")
     def larch_normalize(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         e0: float | None = None,
         pre1: float | None = None,
@@ -112,7 +112,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_autobk")
     def larch_autobk(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         rbkg: float = 1.0,
         kweight: int = 2,
@@ -189,7 +189,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_xftf")
     def larch_xftf(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         kmin: float = 2.0,
         kmax: float | None = None,
@@ -268,7 +268,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_xftr")
     def larch_xftr(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         rmin: float = 0.0,
         rmax: float = 5.0,
@@ -320,7 +320,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_fluo_corr")
     def larch_fluo_corr(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         formula: str,
         elem: str,
@@ -374,7 +374,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_mback_norm")
     def larch_mback_norm(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         z: int | None = None,
         edge: str = "K",
@@ -431,7 +431,7 @@ def register(mcp: FastMCP) -> None:
             return {"error": format_error("larch_mback_norm", e)}
 
     @mcp.tool(name="larch_estimate_noise")
-    def larch_estimate_noise(ctx: Any, group_id: str) -> dict:
+    def larch_estimate_noise(ctx: Context, group_id: str) -> dict:
         """Estimate noise level in chi(k) and chi(R).
 
         Must have run autobk and xftf first.
@@ -469,7 +469,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(name="larch_rebin")
     def larch_rebin(
-        ctx: Any,
+        ctx: Context,
         group_id: str,
         e0: float | None = None,
         pre1: float | None = None,

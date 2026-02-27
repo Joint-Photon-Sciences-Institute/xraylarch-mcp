@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xraylarch-mcp"
+version = "0.1.0"
+description = "MCP server for X-ray spectroscopy analysis via xraylarch"
+readme = "README.md"
+license = {text = "BSD-3-Clause"}
+requires-python = ">=3.9"
+dependencies = [
+    "xraylarch",
+    "mcp[cli]",
+    "numpy",
+    "matplotlib",
+]
+
+[project.scripts]
+xraylarch-mcp = "xraylarch_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

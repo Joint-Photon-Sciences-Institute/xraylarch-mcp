@@ -16,6 +16,12 @@ from .session import SessionManager
 @asynccontextmanager
 async def larch_lifespan(app: FastMCP):
     """Initialize the larch session manager at server startup."""
+    # Pre-import heavy larch modules so the first tool call doesn't timeout
+    import larch  # noqa: F401
+    from larch import Group  # noqa: F401
+    from larch.xafs import autobk, pre_edge, xftf, xftr  # noqa: F401
+    from larch.io import read_ascii, read_athena, read_xdi  # noqa: F401
+
     session = SessionManager()
     yield {"session": session}
 

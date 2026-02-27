@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xraylarch-mcp"
-version = "0.3.0"
+version = "0.3.1"
 description = "MCP server for X-ray spectroscopy analysis via xraylarch"
 readme = "README.md"
 license = "BSD-3-Clause"

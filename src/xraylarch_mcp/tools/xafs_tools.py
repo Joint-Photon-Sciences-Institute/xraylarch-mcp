@@ -467,6 +467,66 @@ def register(mcp: FastMCP) -> None:
         except Exception as e:
             return {"error": format_error("larch_estimate_noise", e)}
 
+    @mcp.tool(name="larch_cauchy_wavelet")
+    def larch_cauchy_wavelet(
+        ctx: Context,
+        group_id: str,
+        kweight: int = 2,
+        rmax_out: float = 10.0,
+        nfft: int = 2048,
+    ) -> dict:
+        """Cauchy Wavelet Transform of EXAFS chi(k).
+
+        Computes the continuous Cauchy wavelet transform, providing
+        simultaneous k- and R-space resolution. Useful for identifying
+        which k-ranges contribute to specific R-space features.
+
+        Must have run larch_autobk first to extract chi(k).
+
+        Args:
+            group_id: ID of the group with chi(k) from larch_autobk.
+            kweight: k-weighting power (0, 1, 2, or 3). Default 2.
+            rmax_out: Maximum R for output (Angstroms). Default 10.
+            nfft: FFT size. Default 2048.
+
+        Returns:
+            k-range, R-range, shape of wavelet magnitude array.
+        """
+        session = _get_session(ctx)
+        try:
+            group = session.get_group(group_id)
+        except KeyError as e:
+            return {"error": str(e)}
+
+        if not hasattr(group, "k") or not hasattr(group, "chi"):
+            return {
+                "error": f"Group '{group_id}' has no chi(k). Run larch_autobk first."
+            }
+
+        try:
+            from larch.xafs.cauchy_wavelet import cauchy_wavelet
+
+            cauchy_wavelet(
+                group.k, group.chi,
+                group=group,
+                kweight=kweight,
+                rmax_out=rmax_out,
+                nfft=nfft,
+            )
+
+            return {
+                "group_id": group_id,
+                "k_range": [float(group.k.min()), float(group.k.max())],
+                "r_range": [float(group.wcauchy_r.min()), float(group.wcauchy_r.max())],
+                "shape": list(group.wcauchy_mag.shape),
+                "kweight": kweight,
+                "rmax_out": rmax_out,
+                "wcauchy_mag_max": float(group.wcauchy_mag.max()),
+            }
+
+        except Exception as e:
+            return {"error": format_error("larch_cauchy_wavelet", e)}
+
     @mcp.tool(name="larch_rebin")
     def larch_rebin(
         ctx: Context,

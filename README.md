@@ -65,13 +65,14 @@ Claude will:
 | `larch_fluo_corr` | Fluorescence self-absorption correction |
 | `larch_mback_norm` | MBACK normalization (alternative for problematic data) |
 | `larch_estimate_noise` | Noise estimation in chi(k) and chi(R) |
+| `larch_cauchy_wavelet` | Cauchy wavelet transform for simultaneous k- and R-resolution |
 | `larch_rebin` | Rebin to standard 3-region XAFS energy grid |
 
 ### Plot Tools
 
 | Tool | Description |
 |------|-------------|
-| `larch_plot` | Publication-quality plots (mu, norm, flat, dmude, chi_k, chi_r, chi_q) |
+| `larch_plot` | Publication-quality plots (mu, norm, flat, dmude, chi_k, chi_r, chi_q, cauchy_wavelet) |
 
 ### Math Tools
 

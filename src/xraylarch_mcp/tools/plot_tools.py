@@ -29,6 +29,7 @@ _AXIS_LABELS = {
     "chi_r": (r"R ($\AA$)", None),
     "chi_r_mag": (r"R ($\AA$)", None),
     "chi_q": (r"q ($\AA^{-1}$)", None),
+    "cauchy_wavelet": (r"k ($\AA^{-1}$)", r"R ($\AA$)"),
 }
 
 
@@ -80,10 +81,13 @@ def _get_plot_data(group: Any, plot_type: str, kweight: int = 2) -> tuple:
             group.chiq_mag,
             (r"q ($\AA^{-1}$)", _chiq_ylabel(kweight)),
         )
+    elif plot_type == "cauchy_wavelet":
+        # 2D data — handled specially in the plot function
+        raise ValueError("cauchy_wavelet is a 2D plot; use the dedicated branch in larch_plot.")
     else:
         raise ValueError(
             f"Unknown plot_type '{plot_type}'. "
-            "Valid types: mu, norm, flat, dmude, chi_k, chi_r, chi_r_mag, chi_q"
+            "Valid types: mu, norm, flat, dmude, chi_k, chi_r, chi_r_mag, chi_q, cauchy_wavelet"
         )
 
 
@@ -119,6 +123,7 @@ def register(mcp: FastMCP) -> None:
                 "chi_k" - chi(k) weighted by k^kweight
                 "chi_r" or "chi_r_mag" - |chi(R)| magnitude
                 "chi_q" - |chi(q)| back-transform magnitude
+                "cauchy_wavelet" - 2D wavelet transform contour (k vs R)
             kweight: k-weighting for chi plots (0, 1, 2, or 3). Default 2.
             xmin: X-axis minimum.
             xmax: X-axis maximum.
@@ -152,6 +157,7 @@ def register(mcp: FastMCP) -> None:
             "chi_r": ["r", "chir_mag"],
             "chi_r_mag": ["r", "chir_mag"],
             "chi_q": ["q", "chiq_mag"],
+            "cauchy_wavelet": ["k", "wcauchy_mag", "wcauchy_r"],
         }
         if plot_type not in required:
             return {
@@ -164,6 +170,46 @@ def register(mcp: FastMCP) -> None:
                 }
 
         try:
+            # --- 2D wavelet contour plot ---
+            if plot_type == "cauchy_wavelet":
+                fig, ax = plt.subplots(figsize=(figsize_w, figsize_h))
+                im = ax.contourf(
+                    group.k, group.wcauchy_r, group.wcauchy_mag,
+                    levels=100, cmap="jet",
+                )
+                ax.set_xlabel(r"k ($\AA^{-1}$)", fontsize=12)
+                ax.set_ylabel(r"R ($\AA$)", fontsize=12)
+                cbar = fig.colorbar(im, ax=ax)
+                cbar.set_label("|WT|")
+
+                if xmin is not None or xmax is not None:
+                    ax.set_xlim(xmin, xmax)
+                if ymin is not None or ymax is not None:
+                    ax.set_ylim(ymin, ymax)
+
+                wt_title = title or f"Cauchy Wavelet Transform — {group_id}"
+                ax.set_title(wt_title, fontsize=13)
+                ax.tick_params(labelsize=10)
+                fig.tight_layout()
+
+                if save_path:
+                    fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+                    plt.close(fig)
+                    return {"saved_to": save_path, "dpi": dpi}
+                else:
+                    buf = io.BytesIO()
+                    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+                    plt.close(fig)
+                    buf.seek(0)
+                    b64 = base64.b64encode(buf.read()).decode()
+                    return {
+                        "image_base64": b64,
+                        "format": "png",
+                        "dpi": dpi,
+                        "plot_type": plot_type,
+                        "group_id": group_id,
+                    }
+
             fig, ax = plt.subplots(figsize=(figsize_w, figsize_h))
 
             # Plot primary group
@@ -248,6 +294,7 @@ def register(mcp: FastMCP) -> None:
                     "chi_r": "Fourier Transform Magnitude",
                     "chi_r_mag": "Fourier Transform Magnitude",
                     "chi_q": "Back Transform",
+                    "cauchy_wavelet": "Cauchy Wavelet Transform",
                 }
                 ax.set_title(
                     f"{type_names.get(plot_type, plot_type)} — {group_id}",

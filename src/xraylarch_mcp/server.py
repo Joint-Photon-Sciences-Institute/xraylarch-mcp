@@ -106,7 +106,7 @@ def larch_run_code(ctx: Context, code: str) -> dict:
 
 
 # Register all tool modules
-from .tools import fitting_tools, io_tools, math_tools, plot_tools, xafs_tools
+from .tools import fitting_tools, interactive_tools, io_tools, math_tools, plot_tools, xafs_tools
 from .resources import docs
 
 io_tools.register(mcp)
@@ -114,4 +114,5 @@ xafs_tools.register(mcp)
 plot_tools.register(mcp)
 math_tools.register(mcp)
 fitting_tools.register(mcp)
+interactive_tools.register(mcp)
 docs.register(mcp)

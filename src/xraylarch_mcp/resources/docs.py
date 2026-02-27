@@ -242,6 +242,53 @@ Use larch_lcf for linear combination fitting against standards.
 XANES with the derivative overlaid."
 """
 
+    @mcp.resource("larch://docs/interactive")
+    def interactive_docs() -> str:
+        """Interactive GUI tools reference."""
+        return """# xraylarch Interactive Tools Reference
+
+Interactive tools launch matplotlib GUI windows as subprocesses, allowing you
+to visually tune analysis parameters with sliders and real-time feedback.
+The MCP server runs headless (Agg backend), so these tools spawn a separate
+process with a display backend (TkAgg).
+
+More interactive tools will be added over time.
+
+## larch_interactive_norm
+
+Opens a two-panel plot (raw mu + flattened) with sliders for normalization
+parameters. Adjust sliders to see the effect in real time, then close the
+window to apply the chosen parameters.
+
+**Parameters:**
+- group_id: ID of the loaded spectrum (must have energy and mu arrays)
+- e0: Initial edge energy (auto-detected if omitted)
+- pre1, pre2: Initial pre-edge fit range relative to E0
+- norm1, norm2: Initial post-edge fit range relative to E0
+- nnorm: Initial post-edge polynomial degree (1-3)
+- save_path: Optional path to write a plain-text parameters file
+
+**Workflow:**
+1. Load a spectrum with larch_load_spectrum
+2. Call larch_interactive_norm with the group_id
+3. A matplotlib window opens with sliders for pre1, pre2, norm1, norm2, nnorm
+4. Adjust sliders - the plot updates in real time
+5. Click "Save" to write params, or just close the window
+6. The tool applies the final parameters via pre_edge() and returns them
+
+**What the GUI shows:**
+- Left panel: raw mu(E) with pre-edge line, post-edge line, and shaded fit regions
+- Right panel: flattened normalized spectrum with edge_step displayed
+- Five sliders: pre1, pre2, norm1, norm2, nnorm
+- Save button to export parameters
+
+**Standalone usage:**
+The GUI can also be invoked directly from the command line:
+```
+python -m xraylarch_mcp.interactive.norm <data.npz> <output.json> [--e0 VAL] [--pre1 VAL] ...
+```
+"""
+
     @mcp.resource("larch://docs/examples/exafs")
     def exafs_example() -> str:
         """EXAFS analysis workflow example."""

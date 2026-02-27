@@ -92,6 +92,23 @@ Claude will:
 | `larch_feffit` | FEFFIT EXAFS shell fitting |
 | `larch_peak_fit` | Peak fitting (Gaussian, Voigt, etc.) |
 
+### Interactive Tools
+
+| Tool | Description |
+|------|-------------|
+| `larch_interactive_norm` | Open an interactive HTML page to tune normalization parameters |
+| `larch_apply_norm_params` | Apply normalization parameters from a saved JSON file |
+
+#### Interactive normalization workflow
+
+1. Ask Claude to interactively normalize your spectrum
+2. An HTML page opens in your browser with Plotly.js plots and sliders
+3. Adjust E0, pre-edge range, post-edge range, and polynomial degree — plots update in real time
+4. Click **Save Parameters** to download a JSON file, or **Copy to Clipboard**
+5. Tell Claude to apply the saved parameters
+
+> "Load Pdfoil.prj and let me interactively choose the normalization parameters"
+
 ### Advanced
 
 | Tool | Description |
@@ -106,6 +123,7 @@ The server exposes documentation resources that Claude can read on demand:
 - `larch://docs/io` — I/O functions reference
 - `larch://docs/fitting` — Fitting reference
 - `larch://docs/feff` — FEFF interface reference
+- `larch://docs/interactive` — Interactive tools reference
 - `larch://docs/examples/xanes` — XANES workflow example
 - `larch://docs/examples/exafs` — EXAFS workflow example
 

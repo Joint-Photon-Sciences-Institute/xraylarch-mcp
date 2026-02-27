@@ -247,18 +247,15 @@ XANES with the derivative overlaid."
         """Interactive GUI tools reference."""
         return """# xraylarch Interactive Tools Reference
 
-Interactive tools launch matplotlib GUI windows as subprocesses, allowing you
-to visually tune analysis parameters with sliders and real-time feedback.
-The MCP server runs headless (Agg backend), so these tools spawn a separate
-process with a display backend (TkAgg).
-
-More interactive tools will be added over time.
+Interactive tools generate self-contained HTML pages that open in the user's
+browser. This avoids blocking the MCP server and provides a responsive UI
+using Plotly.js with real-time parameter adjustment.
 
 ## larch_interactive_norm
 
-Opens a two-panel plot (raw mu + flattened) with sliders for normalization
-parameters. Adjust sliders to see the effect in real time, then close the
-window to apply the chosen parameters.
+Generates an HTML page with interactive Plotly.js plots and sliders for
+tuning normalization parameters. The page opens automatically in the
+default browser.
 
 **Parameters:**
 - group_id: ID of the loaded spectrum (must have energy and mu arrays)
@@ -266,27 +263,32 @@ window to apply the chosen parameters.
 - pre1, pre2: Initial pre-edge fit range relative to E0
 - norm1, norm2: Initial post-edge fit range relative to E0
 - nnorm: Initial post-edge polynomial degree (1-3)
-- save_path: Optional path to write a plain-text parameters file
+- html_path: Optional path for the HTML file (temp file if omitted)
 
 **Workflow:**
 1. Load a spectrum with larch_load_spectrum
 2. Call larch_interactive_norm with the group_id
-3. A matplotlib window opens with sliders for pre1, pre2, norm1, norm2, nnorm
-4. Adjust sliders - the plot updates in real time
-5. Click "Save" to write params, or just close the window
-6. The tool applies the final parameters via pre_edge() and returns them
+3. An HTML page opens in the browser with Plotly plots and sliders
+4. Adjust sliders (E0, pre1, pre2, norm1, norm2, nnorm) - plots update in real time
+5. Click "Save Parameters" to download a JSON file, or "Copy to Clipboard"
+6. Call larch_apply_norm_params with the downloaded JSON to apply the parameters
 
-**What the GUI shows:**
-- Left panel: raw mu(E) with pre-edge line, post-edge line, and shaded fit regions
-- Right panel: flattened normalized spectrum with edge_step displayed
-- Five sliders: pre1, pre2, norm1, norm2, nnorm
-- Save button to export parameters
+**What the page shows:**
+- Left plot: raw mu(E) with pre-edge line, post-edge curve, and shaded fit regions
+- Right plot: normalized and flattened spectrum with edge_step displayed
+- Six sliders: E0, pre1, pre2, norm1, norm2, nnorm (with linked number inputs)
+- Parameter display panel showing current values
+- Save (JSON download), Copy to Clipboard, and Reset buttons
 
-**Standalone usage:**
-The GUI can also be invoked directly from the command line:
-```
-python -m xraylarch_mcp.interactive.norm <data.npz> <output.json> [--e0 VAL] [--pre1 VAL] ...
-```
+## larch_apply_norm_params
+
+Reads normalization parameters from a JSON file (saved from the interactive
+HTML tool) and applies them to a group via pre_edge().
+
+**Parameters:**
+- group_id: ID of the spectrum group
+- params_path: Path to the JSON file from the interactive tool
+- e0, pre1, pre2, norm1, norm2, nnorm: Optional overrides for file values
 """
 
     @mcp.resource("larch://docs/examples/exafs")

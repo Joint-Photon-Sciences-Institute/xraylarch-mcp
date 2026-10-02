@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from larch import Group
-from larch.io import read_athena, read_xdi
+from larch.io import read_ascii, read_athena
 
 from tests.conftest import MockContext
 from xraylarch_mcp.server import mcp
@@ -29,7 +29,7 @@ def call(ctx: MockContext, name: str, **arguments) -> dict:
 def cu_ctx() -> MockContext:
     """Cu foil at room temperature, as group 'cu'."""
     session = SessionManager()
-    group = read_xdi(CU)
+    group = read_ascii(CU)  # read_xdi needs a compiled library that some platforms lack
     group.mu = group.mutrans
     session.add_group(group, group_id="cu")
     return MockContext(session)
@@ -95,7 +95,7 @@ def test_mback_norm_runs_and_keeps_the_pre_edge_step(fe_ctx):
 
 def test_fluo_corr_puts_the_corrected_spectrum_in_a_new_group():
     session = SessionManager()
-    group = read_xdi(FLUO)
+    group = read_ascii(FLUO)
     group.mu = group.fe_ka / group.i0
     session.add_group(group, group_id="fe")
     ctx = MockContext(session)

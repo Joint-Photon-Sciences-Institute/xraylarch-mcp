@@ -21,8 +21,8 @@ def register(mcp: FastMCP) -> None:
         ctx: Context,
         group_id: str,
         standard_group_ids: list[str],
-        xmin: float = -float("inf"),
-        xmax: float = float("inf"),
+        xmin: float | None = None,
+        xmax: float | None = None,
         arrayname: str = "norm",
         sum_to_one: bool = True,
         vary_e0: bool = False,
@@ -35,8 +35,8 @@ def register(mcp: FastMCP) -> None:
         Args:
             group_id: ID of the unknown spectrum group.
             standard_group_ids: List of IDs of standard/reference spectrum groups.
-            xmin: Minimum energy (or k) for the fit range.
-            xmax: Maximum energy (or k) for the fit range.
+            xmin: Minimum energy (or k) for the fit range. Default: no limit.
+            xmax: Maximum energy (or k) for the fit range. Default: no limit.
             arrayname: Which array to fit: "norm", "flat", "dmude", "chi", etc.
             sum_to_one: Constrain weights to sum to 1. Default True.
             vary_e0: Allow E0 shifts for each standard. Default False.
@@ -58,8 +58,8 @@ def register(mcp: FastMCP) -> None:
                 group,
                 standards,
                 arrayname=arrayname,
-                xmin=xmin,
-                xmax=xmax,
+                xmin=-np.inf if xmin is None else xmin,
+                xmax=np.inf if xmax is None else xmax,
                 sum_to_one=sum_to_one,
                 vary_e0=vary_e0,
             )
@@ -99,8 +99,8 @@ def register(mcp: FastMCP) -> None:
         ctx: Context,
         group_ids: list[str],
         arrayname: str = "norm",
-        xmin: float = -float("inf"),
-        xmax: float = float("inf"),
+        xmin: float | None = None,
+        xmax: float | None = None,
     ) -> dict:
         """Principal Component Analysis on a set of spectra.
 
@@ -110,11 +110,13 @@ def register(mcp: FastMCP) -> None:
         Args:
             group_ids: List of spectrum group IDs to include.
             arrayname: Array to analyze ("norm", "flat", "chi", etc.).
-            xmin: Minimum x-value for the analysis range.
-            xmax: Maximum x-value for the analysis range.
+            xmin: Minimum x-value for the analysis range. Default: no limit.
+            xmax: Maximum x-value for the analysis range. Default: no limit.
 
         Returns:
             Eigenvalues, variance explained, suggested number of components.
+            larch subtracts the mean spectrum first, so for normalized
+            spectra N significant components mean N+1 distinct species.
         """
         session = _get_session(ctx)
         try:
@@ -129,7 +131,10 @@ def register(mcp: FastMCP) -> None:
             from larch.math import pca_train
 
             pca_model = pca_train(
-                groups, arrayname=arrayname, xmin=xmin, xmax=xmax
+                groups,
+                arrayname=arrayname,
+                xmin=-np.inf if xmin is None else xmin,
+                xmax=np.inf if xmax is None else xmax,
             )
 
             eigenvalues = pca_model.eigenvalues
@@ -151,6 +156,12 @@ def register(mcp: FastMCP) -> None:
                 "variance_explained": [float(v) for v in variance[:10]],
                 "cumulative_variance": [float(c) for c in cumvar[:10]],
                 "suggested_n_components": n_suggested,
+                "note": (
+                    "larch subtracts the mean spectrum before the decomposition, so for "
+                    "normalized spectra N significant components correspond to N+1 "
+                    "distinct species. suggested_n_components is the number of "
+                    "components needed to reach 95% cumulative variance."
+                ),
             }
 
         except Exception as e:
@@ -364,8 +375,9 @@ def register(mcp: FastMCP) -> None:
                 "model": model,
                 "background": background,
                 "parameters": params,
-                "chisqr": float(result.chisqr) if hasattr(result, "chisqr") else None,
-                "redchi": float(result.redchi) if hasattr(result, "redchi") else None,
+                # fit_peak names these chi_square / chi_reduced
+                "chisqr": float(result.chi_square) if hasattr(result, "chi_square") else None,
+                "redchi": float(result.chi_reduced) if hasattr(result, "chi_reduced") else None,
             }
 
         except Exception as e:

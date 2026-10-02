@@ -572,7 +572,7 @@ def register(mcp: FastMCP) -> None:
             exafs_kstep: k-step in EXAFS region. Default 0.05.
 
         Returns:
-            New grid info.
+            The new group holding the rebinned spectrum, and its grid.
         """
         session = _get_session(ctx)
         try:
@@ -580,12 +580,20 @@ def register(mcp: FastMCP) -> None:
         except KeyError as e:
             return {"error": str(e)}
 
-        try:
-            from larch.xafs import rebin_xafs
+        if not hasattr(group, "energy") or not hasattr(group, "mu"):
+            return {"error": f"Group '{group_id}' needs energy and mu arrays."}
 
-            kwargs: dict[str, Any] = {"exafs_kstep": exafs_kstep}
-            if e0 is not None:
-                kwargs["e0"] = e0
+        try:
+            from larch import Group
+            from larch.xafs import find_e0, rebin_xafs
+
+            # rebin_xafs falls back to group.e0 but not to find_e0
+            if e0 is None:
+                e0 = getattr(group, "e0", None)
+            if e0 is None:
+                e0 = find_e0(group.energy, group.mu)
+
+            kwargs: dict[str, Any] = {"e0": float(e0), "exafs_kstep": exafs_kstep}
             if pre1 is not None:
                 kwargs["pre1"] = pre1
             if pre2 is not None:
@@ -597,12 +605,23 @@ def register(mcp: FastMCP) -> None:
 
             rebin_xafs(group, **kwargs)
 
+            # larch leaves the group's arrays alone and writes the result to
+            # group.rebinned, which the other tools cannot reach.
+            rebinned = Group(
+                energy=np.asarray(group.rebinned.energy, dtype=float),
+                mu=np.asarray(group.rebinned.mu, dtype=float),
+            )
+            new_id = session.add_group(rebinned, group_id=f"{group_id}_rebinned")
+
             return {
-                "group_id": group_id,
-                "n_points": len(group.energy),
+                "group_id": new_id,
+                "source_group_id": group_id,
+                "e0": float(e0),
+                "n_points_before": len(group.energy),
+                "n_points": len(rebinned.energy),
                 "energy_range": [
-                    float(group.energy.min()),
-                    float(group.energy.max()),
+                    float(rebinned.energy.min()),
+                    float(rebinned.energy.max()),
                 ],
             }
 

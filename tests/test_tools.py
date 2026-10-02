@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import numpy as np
@@ -105,3 +106,42 @@ def test_fluo_corr_puts_the_corrected_spectrum_in_a_new_group():
     assert out["norm_max_before"] == pytest.approx(1.035, abs=0.002)
     assert out["norm_max_corrected"] == pytest.approx(1.171, abs=0.002)
     np.testing.assert_allclose(session.get_group("fe_fluo_corr").mu, group.mu_corr)
+
+
+def test_rebin_puts_the_new_grid_in_a_new_group(cu_ctx):
+    out = call(cu_ctx, "larch_rebin", group_id="cu")  # not normalized: E0 from find_e0
+    assert "error" not in out, out
+    assert out["group_id"] == "cu_rebinned" and out["source_group_id"] == "cu"
+    assert out["e0"] == pytest.approx(8980.5, abs=1.0)
+    assert (out["n_points_before"], out["n_points"]) == (408, 523)
+    assert len(cu_ctx.session.get_group("cu_rebinned").energy) == 523
+    normalized = call(cu_ctx, "larch_normalize", group_id="cu_rebinned")
+    assert normalized["edge_step"] == pytest.approx(2.725, abs=0.005)
+
+
+def test_peak_fit_reports_fit_statistics(fe_ctx):
+    assert "error" not in call(fe_ctx, "larch_normalize", group_id="fe2o3")
+    out = call(fe_ctx, "larch_peak_fit", group_id="fe2o3", model="gaussian", xmin=7108.0, xmax=7116.0)
+    assert "error" not in out, out
+    assert out["parameters"]["center"]["value"] == pytest.approx(7113.34, abs=0.1)
+    assert out["chisqr"] is not None and out["redchi"] is not None
+    assert 0 < out["redchi"] < out["chisqr"]
+
+
+def test_pca_explains_the_component_count(fe_ctx):
+    for gid in ("feo", "fe2o3", "fe3c"):
+        assert "error" not in call(fe_ctx, "larch_normalize", group_id=gid)
+    out = call(fe_ctx, "larch_pca", group_ids=["feo", "fe2o3", "fe3c"])
+    assert "error" not in out, out
+    assert out["suggested_n_components"] == 2
+    assert "N+1" in out["note"]
+
+
+@pytest.mark.parametrize("name", ["larch_lcf", "larch_pca"])
+def test_range_defaults_are_valid_json_schema(name):
+    """JSON has no infinity: an unbounded default must be null, and null accepted."""
+    tool = next(t for t in asyncio.run(mcp.list_tools()) if t.name == name)
+    for bound in ("xmin", "xmax"):
+        schema = tool.inputSchema["properties"][bound]
+        assert schema["default"] is None
+        assert {"type": "null"} in schema["anyOf"]

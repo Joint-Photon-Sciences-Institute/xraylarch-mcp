@@ -64,24 +64,24 @@ def register(mcp: FastMCP) -> None:
                 vary_e0=vary_e0,
             )
 
-            # Extract results
-            weights = {}
-            for i, sid in enumerate(standard_group_ids):
-                w_attr = f"weight_{i}"
-                if hasattr(result, w_attr):
-                    w = getattr(result, w_attr)
-                    weights[sid] = float(w) if isinstance(w, (int, float)) else None
+            # lincombo_fit keys result.weights by each standard's file label;
+            # the fit parameters c0, c1, ... follow the order of the standards.
+            fitted = result.result.params
 
-            # Try to get weights from result params
-            if not any(v is not None for v in weights.values()):
-                if hasattr(result, "weights"):
-                    for i, sid in enumerate(standard_group_ids):
-                        if i < len(result.weights):
-                            weights[sid] = float(result.weights[i])
+            def _value(par) -> dict:
+                return {
+                    "value": float(par.value),
+                    "stderr": float(par.stderr) if par.stderr is not None else None,
+                }
+
+            weights = {
+                sid: _value(fitted[f"c{i}"]) for i, sid in enumerate(standard_group_ids)
+            }
 
             return {
                 "group_id": group_id,
                 "weights": weights,
+                "e0_shift": _value(fitted["e0_shift"]) if vary_e0 else None,
                 "rfactor": float(result.rfactor) if hasattr(result, "rfactor") else None,
                 "chisqr": float(result.chisqr) if hasattr(result, "chisqr") else None,
                 "redchi": float(result.redchi) if hasattr(result, "redchi") else None,

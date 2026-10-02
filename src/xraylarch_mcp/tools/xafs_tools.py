@@ -341,7 +341,8 @@ def register(mcp: FastMCP) -> None:
             angout: Exit beam angle in degrees. Default 45.
 
         Returns:
-            Confirmation and summary of corrected data.
+            The new group holding the corrected spectrum (its mu is the
+            corrected mu), and the normalized peak height before and after.
         """
         session = _get_session(ctx)
         try:
@@ -349,24 +350,39 @@ def register(mcp: FastMCP) -> None:
         except KeyError as e:
             return {"error": str(e)}
 
+        if not hasattr(group, "energy") or not hasattr(group, "mu"):
+            return {"error": f"Group '{group_id}' needs energy and mu arrays."}
+
         try:
+            from larch import Group
             from larch.xafs import fluo_corr
 
             fluo_corr(
-                group,
-                formula=formula,
-                elem=elem,
+                group.energy,
+                group.mu,
+                formula,
+                elem,
+                group=group,
                 edge=edge,
                 anginp=anginp,
                 angout=angout,
             )
 
+            # larch writes mu_corr / norm_corr; the other tools read mu, so the
+            # corrected spectrum goes into a group of its own.
+            corrected = Group(energy=group.energy.copy(), mu=group.mu_corr.copy())
+            new_id = session.add_group(corrected, group_id=f"{group_id}_fluo_corr")
+
             return {
-                "group_id": group_id,
-                "correction_applied": True,
+                "group_id": new_id,
+                "source_group_id": group_id,
                 "formula": formula,
                 "elem": elem,
                 "edge": edge,
+                "norm_max_before": (
+                    float(group.norm.max()) if hasattr(group, "norm") else None
+                ),
+                "norm_max_corrected": float(group.norm_corr.max()),
             }
 
         except Exception as e:
@@ -379,7 +395,6 @@ def register(mcp: FastMCP) -> None:
         z: int | None = None,
         edge: str = "K",
         e0: float | None = None,
-        order: int = 3,
     ) -> dict:
         """MBACK normalization (alternative to standard pre_edge normalization).
 
@@ -392,10 +407,11 @@ def register(mcp: FastMCP) -> None:
             z: Atomic number of the absorbing element (if not auto-detected).
             edge: Absorption edge. Default "K".
             e0: Edge energy in eV. If None, auto-detected.
-            order: Polynomial order for the fit. Default 3.
 
         Returns:
-            Normalization results.
+            Normalization results. norm and edge_step now hold the MBACK
+            normalization; the pre_edge ones are kept in norm_poly and
+            edge_step_poly.
         """
         session = _get_session(ctx)
         try:
@@ -406,7 +422,7 @@ def register(mcp: FastMCP) -> None:
         try:
             from larch.xafs import mback_norm
 
-            kwargs: dict[str, Any] = {"edge": edge, "order": order}
+            kwargs: dict[str, Any] = {"edge": edge}
             if z is not None:
                 kwargs["z"] = z
             if e0 is not None:
@@ -419,6 +435,9 @@ def register(mcp: FastMCP) -> None:
                 "e0": float(group.e0) if hasattr(group, "e0") else None,
                 "edge_step": (
                     float(group.edge_step) if hasattr(group, "edge_step") else None
+                ),
+                "edge_step_poly": (
+                    float(group.edge_step_poly) if hasattr(group, "edge_step_poly") else None
                 ),
                 "norm_range": (
                     [float(group.norm.min()), float(group.norm.max())]

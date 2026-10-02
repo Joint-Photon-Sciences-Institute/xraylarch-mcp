@@ -242,11 +242,13 @@ def register(mcp: FastMCP) -> None:
                     if val is None:
                         continue
                     if isinstance(val, str) and val.startswith("guess:"):
+                        # The path refers to the parameter by name: larch only
+                        # links names to the fit's parameter group, so passing
+                        # the Parameter object itself leaves it fixed.
                         guess_val = float(val.split(":")[1])
-                        p = param(guess_val, vary=True)
                         param_name = f"{pname}_{i}"
-                        params_dict[param_name] = p
-                        path_kwargs[pname] = p
+                        params_dict[param_name] = param(guess_val, vary=True)
+                        path_kwargs[pname] = param_name
                     else:
                         path_kwargs[pname] = float(val)
 
@@ -267,9 +269,10 @@ def register(mcp: FastMCP) -> None:
             # Extract results
             report = feffit_report(result)
 
-            # Build parameter results
+            # Build parameter results from the fitted parameters
             param_results = {}
-            for name, p in params_dict.items():
+            for name in params_dict:
+                p = result.params[name]
                 param_results[name] = {
                     "value": float(p.value),
                     "stderr": float(p.stderr) if p.stderr is not None else None,
@@ -280,7 +283,7 @@ def register(mcp: FastMCP) -> None:
                 "group_id": group_id,
                 "rfactor": float(result.rfactor) if hasattr(result, "rfactor") else None,
                 "chi_square": float(result.chi_square) if hasattr(result, "chi_square") else None,
-                "chi_reduced": float(result.chi_reduced) if hasattr(result, "chi_reduced") else None,
+                "chi_reduced": float(result.chi2_reduced) if hasattr(result, "chi2_reduced") else None,
                 "n_independent": float(result.n_independent) if hasattr(result, "n_independent") else None,
                 "n_variables": int(result.nvarys) if hasattr(result, "nvarys") else None,
                 "parameters": param_results,

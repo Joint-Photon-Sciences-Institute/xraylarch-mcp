@@ -63,6 +63,8 @@ def test_feffit_varies_parameters_and_matches_larch_example(cu_ctx):
     assert all(p["stderr"] is not None for p in fit["parameters"].values())
     assert fit["rfactor"] < 0.02
     assert fit["chi_reduced"] == pytest.approx(fit["chi_square"] / (fit["n_independent"] - 4), rel=1e-3)
+    # With larch's autobk defaults the chi-square is the published 112.7.
+    assert fit["chi_square"] == pytest.approx(112.7, rel=0.05)
 
 
 def test_lcf_reports_weights_by_group_id(fe_ctx):

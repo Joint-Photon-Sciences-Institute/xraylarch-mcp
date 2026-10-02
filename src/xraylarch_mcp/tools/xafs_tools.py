@@ -119,7 +119,7 @@ def register(mcp: FastMCP) -> None:
         kmin: float = 0.0,
         kmax: float | None = None,
         nknots: int | None = None,
-        clamp_lo: int = 1,
+        clamp_lo: int = 0,
         clamp_hi: int = 1,
     ) -> dict:
         """Extract EXAFS chi(k) using the AUTOBK algorithm.
@@ -135,7 +135,8 @@ def register(mcp: FastMCP) -> None:
             kmin: Minimum k value for the fit.
             kmax: Maximum k value. If None, auto-determined from data.
             nknots: Number of spline knots. If None, auto-determined.
-            clamp_lo: Clamp value at low-k (0=none, 1=moderate, 2=strong).
+            clamp_lo: Clamp value at low-k (0=none, 1=moderate, 2=strong);
+                      default 0, as in larch.
             clamp_hi: Clamp value at high-k.
 
         Returns:

@@ -343,7 +343,8 @@ def register(mcp: FastMCP) -> None:
 
         Returns:
             The new group holding the corrected spectrum (its mu is the
-            corrected mu), and the normalized peak height before and after.
+            corrected mu), the normalization used, and the normalized peak
+            height before and after.
         """
         session = _get_session(ctx)
         try:
@@ -356,7 +357,22 @@ def register(mcp: FastMCP) -> None:
 
         try:
             from larch import Group
-            from larch.xafs import fluo_corr
+            from larch.xafs import fluo_corr, pre_edge
+
+            # fluo_corr looks for the group's normalization in
+            # pre_edge_details.call_args, which pre_edge never sets, so it
+            # would use its own ranges. Pass the group's ranges explicitly.
+            if not hasattr(group, "pre_edge_details"):
+                pre_edge(group)
+            details = group.pre_edge_details
+            normalization = {
+                "e0": float(group.e0),
+                "pre1": float(details.pre1),
+                "pre2": float(details.pre2),
+                "norm1": float(details.norm1),
+                "norm2": float(details.norm2),
+                "nnorm": int(details.nnorm),
+            }
 
             fluo_corr(
                 group.energy,
@@ -367,6 +383,7 @@ def register(mcp: FastMCP) -> None:
                 edge=edge,
                 anginp=anginp,
                 angout=angout,
+                **normalization,
             )
 
             # larch writes mu_corr / norm_corr; the other tools read mu, so the
@@ -380,9 +397,8 @@ def register(mcp: FastMCP) -> None:
                 "formula": formula,
                 "elem": elem,
                 "edge": edge,
-                "norm_max_before": (
-                    float(group.norm.max()) if hasattr(group, "norm") else None
-                ),
+                "normalization": normalization,
+                "norm_max_before": float(group.norm.max()),
                 "norm_max_corrected": float(group.norm_corr.max()),
             }
 

@@ -106,8 +106,26 @@ def test_fluo_corr_puts_the_corrected_spectrum_in_a_new_group():
     assert "error" not in out, out
     assert out["group_id"] == "fe_fluo_corr" and out["source_group_id"] == "fe"
     assert out["norm_max_before"] == pytest.approx(1.035, abs=0.002)
-    assert out["norm_max_corrected"] == pytest.approx(1.171, abs=0.002)
+    assert out["norm_max_corrected"] == pytest.approx(1.167, abs=0.002)
     np.testing.assert_allclose(session.get_group("fe_fluo_corr").mu, group.mu_corr)
+    # The corrected group, normalized like the original, has the reported peak.
+    renormed = call(ctx, "larch_normalize", group_id="fe_fluo_corr", **out["normalization"])
+    assert renormed["norm_range"][1] == pytest.approx(out["norm_max_corrected"], abs=1e-6)
+
+
+def test_fluo_corr_uses_the_group_normalization():
+    session = SessionManager()
+    group = read_ascii(FLUO)
+    group.mu = group.fe_ka / group.i0
+    session.add_group(group, group_id="fe")
+    ctx = MockContext(session)
+    out = call(ctx, "larch_fluo_corr", group_id="fe", formula="Fe2O3", elem="Fe")
+    assert "error" not in out, out  # not normalized yet: normalized with defaults first
+    assert out["norm_max_corrected"] == pytest.approx(1.167, abs=0.002)
+    call(ctx, "larch_normalize", group_id="fe", pre1=-150, pre2=-30, norm1=50, norm2=140, nnorm=2)
+    out = call(ctx, "larch_fluo_corr", group_id="fe", formula="Fe2O3", elem="Fe")
+    assert out["normalization"]["nnorm"] == 2
+    assert out["norm_max_corrected"] == pytest.approx(1.149, abs=0.002)
 
 
 def test_rebin_puts_the_new_grid_in_a_new_group(cu_ctx):

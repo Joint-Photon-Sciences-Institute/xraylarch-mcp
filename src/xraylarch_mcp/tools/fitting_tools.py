@@ -21,8 +21,8 @@ def register(mcp: FastMCP) -> None:
         ctx: Context,
         group_id: str,
         standard_group_ids: list[str],
-        xmin: float = -float("inf"),
-        xmax: float = float("inf"),
+        xmin: float | None = None,
+        xmax: float | None = None,
         arrayname: str = "norm",
         sum_to_one: bool = True,
         vary_e0: bool = False,
@@ -35,8 +35,8 @@ def register(mcp: FastMCP) -> None:
         Args:
             group_id: ID of the unknown spectrum group.
             standard_group_ids: List of IDs of standard/reference spectrum groups.
-            xmin: Minimum energy (or k) for the fit range.
-            xmax: Maximum energy (or k) for the fit range.
+            xmin: Minimum energy (or k) for the fit range. Default: no limit.
+            xmax: Maximum energy (or k) for the fit range. Default: no limit.
             arrayname: Which array to fit: "norm", "flat", "dmude", "chi", etc.
             sum_to_one: Constrain weights to sum to 1. Default True.
             vary_e0: Allow E0 shifts for each standard. Default False.
@@ -58,30 +58,30 @@ def register(mcp: FastMCP) -> None:
                 group,
                 standards,
                 arrayname=arrayname,
-                xmin=xmin,
-                xmax=xmax,
+                xmin=-np.inf if xmin is None else xmin,
+                xmax=np.inf if xmax is None else xmax,
                 sum_to_one=sum_to_one,
                 vary_e0=vary_e0,
             )
 
-            # Extract results
-            weights = {}
-            for i, sid in enumerate(standard_group_ids):
-                w_attr = f"weight_{i}"
-                if hasattr(result, w_attr):
-                    w = getattr(result, w_attr)
-                    weights[sid] = float(w) if isinstance(w, (int, float)) else None
+            # lincombo_fit keys result.weights by each standard's file label;
+            # the fit parameters c0, c1, ... follow the order of the standards.
+            fitted = result.result.params
 
-            # Try to get weights from result params
-            if not any(v is not None for v in weights.values()):
-                if hasattr(result, "weights"):
-                    for i, sid in enumerate(standard_group_ids):
-                        if i < len(result.weights):
-                            weights[sid] = float(result.weights[i])
+            def _value(par) -> dict:
+                return {
+                    "value": float(par.value),
+                    "stderr": float(par.stderr) if par.stderr is not None else None,
+                }
+
+            weights = {
+                sid: _value(fitted[f"c{i}"]) for i, sid in enumerate(standard_group_ids)
+            }
 
             return {
                 "group_id": group_id,
                 "weights": weights,
+                "e0_shift": _value(fitted["e0_shift"]) if vary_e0 else None,
                 "rfactor": float(result.rfactor) if hasattr(result, "rfactor") else None,
                 "chisqr": float(result.chisqr) if hasattr(result, "chisqr") else None,
                 "redchi": float(result.redchi) if hasattr(result, "redchi") else None,
@@ -99,8 +99,8 @@ def register(mcp: FastMCP) -> None:
         ctx: Context,
         group_ids: list[str],
         arrayname: str = "norm",
-        xmin: float = -float("inf"),
-        xmax: float = float("inf"),
+        xmin: float | None = None,
+        xmax: float | None = None,
     ) -> dict:
         """Principal Component Analysis on a set of spectra.
 
@@ -110,11 +110,13 @@ def register(mcp: FastMCP) -> None:
         Args:
             group_ids: List of spectrum group IDs to include.
             arrayname: Array to analyze ("norm", "flat", "chi", etc.).
-            xmin: Minimum x-value for the analysis range.
-            xmax: Maximum x-value for the analysis range.
+            xmin: Minimum x-value for the analysis range. Default: no limit.
+            xmax: Maximum x-value for the analysis range. Default: no limit.
 
         Returns:
             Eigenvalues, variance explained, suggested number of components.
+            larch subtracts the mean spectrum first, so for normalized
+            spectra N significant components mean N+1 distinct species.
         """
         session = _get_session(ctx)
         try:
@@ -129,7 +131,10 @@ def register(mcp: FastMCP) -> None:
             from larch.math import pca_train
 
             pca_model = pca_train(
-                groups, arrayname=arrayname, xmin=xmin, xmax=xmax
+                groups,
+                arrayname=arrayname,
+                xmin=-np.inf if xmin is None else xmin,
+                xmax=np.inf if xmax is None else xmax,
             )
 
             eigenvalues = pca_model.eigenvalues
@@ -151,6 +156,12 @@ def register(mcp: FastMCP) -> None:
                 "variance_explained": [float(v) for v in variance[:10]],
                 "cumulative_variance": [float(c) for c in cumvar[:10]],
                 "suggested_n_components": n_suggested,
+                "note": (
+                    "larch subtracts the mean spectrum before the decomposition, so for "
+                    "normalized spectra N significant components correspond to N+1 "
+                    "distinct species. suggested_n_components is the number of "
+                    "components needed to reach 95% cumulative variance."
+                ),
             }
 
         except Exception as e:
@@ -242,11 +253,13 @@ def register(mcp: FastMCP) -> None:
                     if val is None:
                         continue
                     if isinstance(val, str) and val.startswith("guess:"):
+                        # The path refers to the parameter by name: larch only
+                        # links names to the fit's parameter group, so passing
+                        # the Parameter object itself leaves it fixed.
                         guess_val = float(val.split(":")[1])
-                        p = param(guess_val, vary=True)
                         param_name = f"{pname}_{i}"
-                        params_dict[param_name] = p
-                        path_kwargs[pname] = p
+                        params_dict[param_name] = param(guess_val, vary=True)
+                        path_kwargs[pname] = param_name
                     else:
                         path_kwargs[pname] = float(val)
 
@@ -267,9 +280,10 @@ def register(mcp: FastMCP) -> None:
             # Extract results
             report = feffit_report(result)
 
-            # Build parameter results
+            # Build parameter results from the fitted parameters
             param_results = {}
-            for name, p in params_dict.items():
+            for name in params_dict:
+                p = result.params[name]
                 param_results[name] = {
                     "value": float(p.value),
                     "stderr": float(p.stderr) if p.stderr is not None else None,
@@ -280,7 +294,7 @@ def register(mcp: FastMCP) -> None:
                 "group_id": group_id,
                 "rfactor": float(result.rfactor) if hasattr(result, "rfactor") else None,
                 "chi_square": float(result.chi_square) if hasattr(result, "chi_square") else None,
-                "chi_reduced": float(result.chi_reduced) if hasattr(result, "chi_reduced") else None,
+                "chi_reduced": float(result.chi2_reduced) if hasattr(result, "chi2_reduced") else None,
                 "n_independent": float(result.n_independent) if hasattr(result, "n_independent") else None,
                 "n_variables": int(result.nvarys) if hasattr(result, "nvarys") else None,
                 "parameters": param_results,
@@ -361,8 +375,9 @@ def register(mcp: FastMCP) -> None:
                 "model": model,
                 "background": background,
                 "parameters": params,
-                "chisqr": float(result.chisqr) if hasattr(result, "chisqr") else None,
-                "redchi": float(result.redchi) if hasattr(result, "redchi") else None,
+                # fit_peak names these chi_square / chi_reduced
+                "chisqr": float(result.chi_square) if hasattr(result, "chi_square") else None,
+                "redchi": float(result.chi_reduced) if hasattr(result, "chi_reduced") else None,
             }
 
         except Exception as e:

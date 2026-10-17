@@ -119,7 +119,7 @@ def register(mcp: FastMCP) -> None:
         kmin: float = 0.0,
         kmax: float | None = None,
         nknots: int | None = None,
-        clamp_lo: int = 1,
+        clamp_lo: int = 0,
         clamp_hi: int = 1,
     ) -> dict:
         """Extract EXAFS chi(k) using the AUTOBK algorithm.
@@ -135,7 +135,8 @@ def register(mcp: FastMCP) -> None:
             kmin: Minimum k value for the fit.
             kmax: Maximum k value. If None, auto-determined from data.
             nknots: Number of spline knots. If None, auto-determined.
-            clamp_lo: Clamp value at low-k (0=none, 1=moderate, 2=strong).
+            clamp_lo: Clamp value at low-k (0=none, 1=moderate, 2=strong);
+                      default 0, as in larch.
             clamp_hi: Clamp value at high-k.
 
         Returns:
@@ -341,7 +342,9 @@ def register(mcp: FastMCP) -> None:
             angout: Exit beam angle in degrees. Default 45.
 
         Returns:
-            Confirmation and summary of corrected data.
+            The new group holding the corrected spectrum (its mu is the
+            corrected mu), the normalization used, and the normalized peak
+            height before and after.
         """
         session = _get_session(ctx)
         try:
@@ -349,24 +352,54 @@ def register(mcp: FastMCP) -> None:
         except KeyError as e:
             return {"error": str(e)}
 
+        if not hasattr(group, "energy") or not hasattr(group, "mu"):
+            return {"error": f"Group '{group_id}' needs energy and mu arrays."}
+
         try:
-            from larch.xafs import fluo_corr
+            from larch import Group
+            from larch.xafs import fluo_corr, pre_edge
+
+            # fluo_corr looks for the group's normalization in
+            # pre_edge_details.call_args, which pre_edge never sets, so it
+            # would use its own ranges. Pass the group's ranges explicitly.
+            if not hasattr(group, "pre_edge_details"):
+                pre_edge(group)
+            details = group.pre_edge_details
+            normalization = {
+                "e0": float(group.e0),
+                "pre1": float(details.pre1),
+                "pre2": float(details.pre2),
+                "norm1": float(details.norm1),
+                "norm2": float(details.norm2),
+                "nnorm": int(details.nnorm),
+            }
 
             fluo_corr(
-                group,
-                formula=formula,
-                elem=elem,
+                group.energy,
+                group.mu,
+                formula,
+                elem,
+                group=group,
                 edge=edge,
                 anginp=anginp,
                 angout=angout,
+                **normalization,
             )
 
+            # larch writes mu_corr / norm_corr; the other tools read mu, so the
+            # corrected spectrum goes into a group of its own.
+            corrected = Group(energy=group.energy.copy(), mu=group.mu_corr.copy())
+            new_id = session.add_group(corrected, group_id=f"{group_id}_fluo_corr")
+
             return {
-                "group_id": group_id,
-                "correction_applied": True,
+                "group_id": new_id,
+                "source_group_id": group_id,
                 "formula": formula,
                 "elem": elem,
                 "edge": edge,
+                "normalization": normalization,
+                "norm_max_before": float(group.norm.max()),
+                "norm_max_corrected": float(group.norm_corr.max()),
             }
 
         except Exception as e:
@@ -379,7 +412,6 @@ def register(mcp: FastMCP) -> None:
         z: int | None = None,
         edge: str = "K",
         e0: float | None = None,
-        order: int = 3,
     ) -> dict:
         """MBACK normalization (alternative to standard pre_edge normalization).
 
@@ -392,10 +424,11 @@ def register(mcp: FastMCP) -> None:
             z: Atomic number of the absorbing element (if not auto-detected).
             edge: Absorption edge. Default "K".
             e0: Edge energy in eV. If None, auto-detected.
-            order: Polynomial order for the fit. Default 3.
 
         Returns:
-            Normalization results.
+            Normalization results. norm and edge_step now hold the MBACK
+            normalization; the pre_edge ones are kept in norm_poly and
+            edge_step_poly.
         """
         session = _get_session(ctx)
         try:
@@ -406,7 +439,7 @@ def register(mcp: FastMCP) -> None:
         try:
             from larch.xafs import mback_norm
 
-            kwargs: dict[str, Any] = {"edge": edge, "order": order}
+            kwargs: dict[str, Any] = {"edge": edge}
             if z is not None:
                 kwargs["z"] = z
             if e0 is not None:
@@ -419,6 +452,9 @@ def register(mcp: FastMCP) -> None:
                 "e0": float(group.e0) if hasattr(group, "e0") else None,
                 "edge_step": (
                     float(group.edge_step) if hasattr(group, "edge_step") else None
+                ),
+                "edge_step_poly": (
+                    float(group.edge_step_poly) if hasattr(group, "edge_step_poly") else None
                 ),
                 "norm_range": (
                     [float(group.norm.min()), float(group.norm.max())]
@@ -553,7 +589,7 @@ def register(mcp: FastMCP) -> None:
             exafs_kstep: k-step in EXAFS region. Default 0.05.
 
         Returns:
-            New grid info.
+            The new group holding the rebinned spectrum, and its grid.
         """
         session = _get_session(ctx)
         try:
@@ -561,12 +597,20 @@ def register(mcp: FastMCP) -> None:
         except KeyError as e:
             return {"error": str(e)}
 
-        try:
-            from larch.xafs import rebin_xafs
+        if not hasattr(group, "energy") or not hasattr(group, "mu"):
+            return {"error": f"Group '{group_id}' needs energy and mu arrays."}
 
-            kwargs: dict[str, Any] = {"exafs_kstep": exafs_kstep}
-            if e0 is not None:
-                kwargs["e0"] = e0
+        try:
+            from larch import Group
+            from larch.xafs import find_e0, rebin_xafs
+
+            # rebin_xafs falls back to group.e0 but not to find_e0
+            if e0 is None:
+                e0 = getattr(group, "e0", None)
+            if e0 is None:
+                e0 = find_e0(group.energy, group.mu)
+
+            kwargs: dict[str, Any] = {"e0": float(e0), "exafs_kstep": exafs_kstep}
             if pre1 is not None:
                 kwargs["pre1"] = pre1
             if pre2 is not None:
@@ -578,12 +622,23 @@ def register(mcp: FastMCP) -> None:
 
             rebin_xafs(group, **kwargs)
 
+            # larch leaves the group's arrays alone and writes the result to
+            # group.rebinned, which the other tools cannot reach.
+            rebinned = Group(
+                energy=np.asarray(group.rebinned.energy, dtype=float),
+                mu=np.asarray(group.rebinned.mu, dtype=float),
+            )
+            new_id = session.add_group(rebinned, group_id=f"{group_id}_rebinned")
+
             return {
-                "group_id": group_id,
-                "n_points": len(group.energy),
+                "group_id": new_id,
+                "source_group_id": group_id,
+                "e0": float(e0),
+                "n_points_before": len(group.energy),
+                "n_points": len(rebinned.energy),
                 "energy_range": [
-                    float(group.energy.min()),
-                    float(group.energy.max()),
+                    float(rebinned.energy.min()),
+                    float(rebinned.energy.max()),
                 ],
             }
 

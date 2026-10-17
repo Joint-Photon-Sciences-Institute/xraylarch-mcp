@@ -136,6 +136,21 @@ The server exposes documentation resources that Claude can read on demand:
 - [MCP specification](https://modelcontextprotocol.io/)
 - [Source code](https://github.com/Joint-Photon-Sciences-Institute/xraylarch-mcp)
 
+## Releasing
+
+Releases go to PyPI from GitHub Actions (`.github/workflows/publish.yml`), with
+no token: PyPI trusts this repository's workflow directly.
+
+1. Set the new version in `pyproject.toml` and `src/xraylarch_mcp/__init__.py`, and merge that to `main`.
+2. Tag the merge commit and push the tag, e.g. `git tag v0.4.1 && git push origin v0.4.1`,
+   or publish a GitHub release with a new tag `v0.4.1`.
+
+The workflow runs the tests, checks that the tag matches both version strings,
+builds the package and uploads it.
+
+One-time setup: in the project's PyPI settings under **Publishing**, add a GitHub publisher with owner `Joint-Photon-Sciences-Institute`,
+repository `xraylarch-mcp`, workflow `publish.yml` and environment `pypi`.
+
 ## License
 
 BSD-3-Clause (matching xraylarch)

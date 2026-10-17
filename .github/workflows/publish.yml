@@ -1,0 +1,63 @@
+name: publish
+
+# Pushing a tag such as v0.4.0 (or publishing a GitHub release that creates
+# it) tests, builds and uploads that version to PyPI. The upload uses PyPI
+# trusted publishing, so no token is stored: the project's PyPI settings name
+# this repository, this workflow file and the "pypi" environment.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check the tag matches the package version
+        run: |
+          python - <<'EOF'
+          import os, re, tomllib
+          tag = os.environ["GITHUB_REF_NAME"]
+          with open("pyproject.toml", "rb") as f:
+              version = tomllib.load(f)["project"]["version"]
+          with open("src/xraylarch_mcp/__init__.py") as f:
+              init = re.search(r'__version__ = "(.+)"', f.read()).group(1)
+          if tag != f"v{version}" or init != version:
+              raise SystemExit(
+                  f"tag {tag}, pyproject.toml {version}, __init__.py {init}: they must agree"
+              )
+          EOF
+      - name: Build
+        run: |
+          python -m pip install build twine
+          python -m build
+          python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  pypi:
+    needs: [tests, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/xraylarch-mcp/
+    permissions:
+      id-token: write  # for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

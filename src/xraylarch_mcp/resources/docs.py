@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.resource("larch://docs/xafs")
     def xafs_docs() -> str:
         """XAFS analysis functions reference."""
@@ -25,14 +25,14 @@ atsym, edge, pre_edge_details (with pre1, pre2, norm1, norm2, nnorm, nvict)
 - nnorm: Post-edge polynomial degree (0-3). Auto: 2 if range>300eV, 1 if >30eV, else 0.
 - nvict: Energy exponent for pre-edge. Default 0 (no victoreen).
 
-## autobk(group, rbkg=1.0, kweight=2, kmin=0, kmax=None, nknots=None, clamp_lo=1, clamp_hi=1)
+## autobk(group, rbkg=1, kweight=1, kmin=0, kmax=None, nknots=None, clamp_lo=0, clamp_hi=1)
 AUTOBK background removal. Extracts chi(k) from mu(E).
 
 **Adds to group:** k, chi, bkg, chie, rbkg, autobk_details
 
 **Parameters:**
 - rbkg: R-space cutoff for background (Angstroms). Should be < nearest-neighbor distance.
-- kweight: k-weighting for the fit. Default 2.
+- kweight: k-weighting for the fit. Default 1 (larch_autobk defaults to 2).
 - kmin, kmax: k-range for fitting.
 - clamp_lo, clamp_hi: Clamp values at low/high k (0=none, 1=moderate, 2=strong).
 
@@ -52,19 +52,29 @@ Reverse Fourier transform: chi(R) -> chi(q). Back-transforms filtered R-range.
 
 **Adds to group:** q, chiq, chiq_mag, chiq_re, chiq_im, rwin
 
-## fluo_corr(group, formula, elem, edge='K', anginp=45, angout=45)
-Fluorescence self-absorption correction (FLUO/Haskel algorithm).
+## fluo_corr(energy, mu, formula, elem, group=None, edge='K', line='Ka', anginp=45, angout=45, **pre_kws)
+Fluorescence self-absorption correction (FLUO/Haskel algorithm). Takes arrays,
+not a group; pre_kws (e0, pre1, pre2, norm1, norm2, nnorm) set the normalization.
+Scales mu by alpha / (alpha + 1 - norm), so it diverges where norm reaches 1 + alpha.
 
-## mback_norm(group, z=None, edge='K', e0=None, order=3)
+**Adds to group:** mu_corr, norm_corr
+(larch_fluo_corr puts the corrected spectrum in a new group, <id>_fluo_corr.)
+
+## mback_norm(group, z=None, edge='K', e0=None, pre1=None, pre2=None, norm1=None, norm2=None, nnorm=None, nvict=1)
 MBACK normalization - matches post-edge to tabulated cross-sections.
 Alternative to pre_edge() for problematic data.
+
+**Replaces on group:** norm, edge_step (the pre_edge ones are kept in norm_poly, edge_step_poly)
 
 ## estimate_noise(group)
 Estimates noise in chi(k) and chi(R).
 **Adds:** epsilon_k, epsilon_r
 
-## rebin_xafs(group, e0=None, pre1=None, pre2=None, pre_step=None, xanes_step=None, exafs_kstep=0.05)
-Rebin to standard 3-region XAFS grid (pre-edge/XANES/EXAFS).
+## rebin_xafs(group, e0=None, pre1=None, pre2=-30, pre_step=2, xanes_step=None, exafs1=15, exafs2=None, exafs_kstep=0.05, method='boxcar')
+Rebin to standard 3-region XAFS grid (pre-edge/XANES/EXAFS). Needs e0 (or group.e0).
+
+**Adds to group:** rebinned, a subgroup with energy, mu, delta_mu, e0
+(larch_rebin puts it in a new group, <id>_rebinned.)
 """
 
     @mcp.resource("larch://docs/io")
@@ -148,7 +158,10 @@ Background: linear, constant, None.
 ## FEFFIT (EXAFS Shell Fitting)
 
 ### FeffPathGroup(filename, label='', s02=None, sigma2=None, deltar=None, e0=None, degen=None)
-Create a Feff scattering path from a feffNNNN.dat file.
+Create a Feff scattering path from a feffNNNN.dat file. Path parameters are
+numbers or expressions naming parameters of the fit's param_group, e.g.
+s02='amp', deltar='alpha*reff'. Passing a param() object instead leaves it fixed.
+Labels must be unique within a dataset: paths are keyed by label.
 
 ### TransformGroup(kmin=0, kmax=20, kweight=2, dk=4, window='kaiser', rmin=0, rmax=10, fitspace='r')
 FT transform parameters for feffit.
@@ -157,7 +170,8 @@ FT transform parameters for feffit.
 Dataset container for feffit.
 
 ### feffit(paramgroup, datasets)
-Perform the fit. Returns result with chi_square, chi_reduced, rfactor, nvarys, n_independent.
+Perform the fit. Returns result with params (the fitted values), chi_square,
+chi2_reduced, rfactor, nvarys, n_independent.
 
 ### feffit_report(result)
 Generate a printable fit report.

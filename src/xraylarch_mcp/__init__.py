@@ -1,3 +1,3 @@
 """xraylarch-mcp: MCP server for X-ray spectroscopy analysis via xraylarch."""
 
-__version__ = "0.3.3"
+__version__ = "0.4.0"

@@ -1,4 +1,4 @@
-"""FastMCP server definition with tool registration and lifespan management."""
+"""MCP server definition with tool registration and lifespan management."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ import traceback
 from contextlib import asynccontextmanager
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 
 from .session import SessionManager
 
 
 @asynccontextmanager
-async def larch_lifespan(app: FastMCP):
+async def larch_lifespan(app: MCPServer):
     """Initialize the larch session manager at server startup."""
     # Pre-import heavy larch modules so the first tool call doesn't timeout
     import larch  # noqa: F401
@@ -26,7 +26,7 @@ async def larch_lifespan(app: FastMCP):
     yield {"session": session}
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "xraylarch-mcp",
     instructions=(
         "X-ray spectroscopy analysis server powered by xraylarch. "

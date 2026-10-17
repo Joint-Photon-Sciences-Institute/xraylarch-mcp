@@ -67,6 +67,36 @@ def test_feffit_varies_parameters_and_matches_larch_example(cu_ctx):
     assert fit["chi_square"] == pytest.approx(112.7, rel=0.05)
 
 
+def test_feffit_paths_can_share_parameters(cu_ctx):
+    """Two copies of the Cu path tied to the first one's variables fit half the S0^2."""
+    assert "error" not in call(cu_ctx, "larch_normalize", group_id="cu")
+    assert "error" not in call(cu_ctx, "larch_autobk", group_id="cu", rbkg=1.0, kweight=2)
+    first = {"s02": "guess:1.0", "sigma2": "guess:0.0", "deltar": "guess:0.0", "e0": "guess:0.0"}
+    # reff is 2.5478 A for this path, so the deltar expression equals deltar_0
+    tied = {"s02": "s02_0", "sigma2": "sigma2_0", "deltar": "deltar_0 * reff / 2.5478", "e0": "e0_0"}
+    fit = call(
+        cu_ctx, "larch_feffit", group_id="cu",
+        paths=[{"filename": FEFF, "label": "a", **first}, {"filename": FEFF, "label": "b", **tied}],
+        kmin=3, kmax=17, kweight=2, dk=4, window="kaiser", rmin=1.4, rmax=3.0, fitspace="r",
+    )
+    assert "error" not in fit, fit
+    params = {name: p["value"] for name, p in fit["parameters"].items()}
+    assert sorted(params) == ["deltar_0", "e0_0", "s02_0", "sigma2_0"]
+    assert params["s02_0"] == pytest.approx(0.931 / 2, abs=0.04)
+    assert params["sigma2_0"] == pytest.approx(0.00867, abs=0.0008)
+    assert params["deltar_0"] == pytest.approx(-0.0060, abs=0.006)
+
+
+def test_feffit_rejects_repeated_labels_and_unknown_names(cu_ctx):
+    call(cu_ctx, "larch_normalize", group_id="cu")
+    call(cu_ctx, "larch_autobk", group_id="cu", rbkg=1.0, kweight=2)
+    path = {"filename": FEFF, "label": "a", "s02": "guess:1.0"}
+    fit = call(cu_ctx, "larch_feffit", group_id="cu", paths=[path, path])
+    assert "repeated: a" in fit["error"]
+    fit = call(cu_ctx, "larch_feffit", group_id="cu", paths=[{**path, "e0": "e0_9"}])
+    assert "e0_9" in fit["error"]
+
+
 def test_lcf_reports_weights_by_group_id(fe_ctx):
     """A 0.6 FeO + 0.4 Fe2O3 mixture of the normalized references."""
     session = fe_ctx.session
@@ -105,9 +135,12 @@ def test_fluo_corr_puts_the_corrected_spectrum_in_a_new_group():
     out = call(ctx, "larch_fluo_corr", group_id="fe", formula="Fe2O3", elem="Fe")
     assert "error" not in out, out
     assert out["group_id"] == "fe_fluo_corr" and out["source_group_id"] == "fe"
+    assert out["line"] == "Ka" and out["alpha"] == pytest.approx(0.401, abs=0.001)
+    assert "note" not in out and "warning" not in out
     assert out["norm_max_before"] == pytest.approx(1.035, abs=0.002)
     assert out["norm_max_corrected"] == pytest.approx(1.167, abs=0.002)
     np.testing.assert_allclose(session.get_group("fe_fluo_corr").mu, group.mu_corr)
+    assert session.get_group("fe_fluo_corr").e0 == out["normalization"]["e0"]
     # The corrected group, normalized like the original, has the reported peak.
     renormed = call(ctx, "larch_normalize", group_id="fe_fluo_corr", **out["normalization"])
     assert renormed["norm_range"][1] == pytest.approx(out["norm_max_corrected"], abs=1e-6)
@@ -121,11 +154,33 @@ def test_fluo_corr_uses_the_group_normalization():
     ctx = MockContext(session)
     out = call(ctx, "larch_fluo_corr", group_id="fe", formula="Fe2O3", elem="Fe")
     assert "error" not in out, out  # not normalized yet: normalized with defaults first
+    assert "normalized with the default pre_edge settings" in out["note"]
     assert out["norm_max_corrected"] == pytest.approx(1.167, abs=0.002)
     call(ctx, "larch_normalize", group_id="fe", pre1=-150, pre2=-30, norm1=50, norm2=140, nnorm=2)
     out = call(ctx, "larch_fluo_corr", group_id="fe", formula="Fe2O3", elem="Fe")
     assert out["normalization"]["nnorm"] == 2
     assert out["norm_max_corrected"] == pytest.approx(1.149, abs=0.002)
+
+
+def test_fluo_corr_refuses_a_diverging_correction(fe_ctx):
+    """Fe2O3 in transmission: its white line (1.51) is above 1 + alpha (1.40)."""
+    assert "error" not in call(fe_ctx, "larch_normalize", group_id="fe2o3")
+    out = call(fe_ctx, "larch_fluo_corr", group_id="fe2o3", formula="Fe2O3", elem="Fe")
+    assert "diverges" in out["error"] and "1 + alpha = 1.401" in out["error"]
+    assert "fe2o3_fluo_corr" not in fe_ctx.session.group_ids
+
+
+def test_fluo_corr_warns_close_to_the_divergence(fe_ctx):
+    """With the project's own normalization the Fe2O3 peak is 1.398, just under 1.401."""
+    out = call(fe_ctx, "larch_fluo_corr", group_id="fe2o3", formula="Fe2O3", elem="Fe")
+    assert out["norm_max_before"] == pytest.approx(1.398, abs=0.001)
+    assert out["norm_max_corrected"] > 100
+    assert "unreliable" in out["warning"]
+
+
+def test_fluo_corr_needs_a_line_for_other_edges(fe_ctx):
+    out = call(fe_ctx, "larch_fluo_corr", group_id="feo", formula="FeO", elem="Fe", edge="M5")
+    assert "set line" in out["error"]
 
 
 def test_rebin_puts_the_new_grid_in_a_new_group(cu_ctx):
@@ -134,7 +189,9 @@ def test_rebin_puts_the_new_grid_in_a_new_group(cu_ctx):
     assert out["group_id"] == "cu_rebinned" and out["source_group_id"] == "cu"
     assert out["e0"] == pytest.approx(8980.5, abs=1.0)
     assert (out["n_points_before"], out["n_points"]) == (408, 523)
-    assert len(cu_ctx.session.get_group("cu_rebinned").energy) == 523
+    rebinned = cu_ctx.session.get_group("cu_rebinned")
+    assert len(rebinned.energy) == len(rebinned.delta_mu) == 523
+    assert rebinned.e0 == out["e0"]
     normalized = call(cu_ctx, "larch_normalize", group_id="cu_rebinned")
     assert normalized["edge_step"] == pytest.approx(2.725, abs=0.005)
 
@@ -162,6 +219,6 @@ def test_range_defaults_are_valid_json_schema(name):
     """JSON has no infinity: an unbounded default must be null, and null accepted."""
     tool = next(t for t in asyncio.run(mcp.list_tools()) if t.name == name)
     for bound in ("xmin", "xmax"):
-        schema = tool.inputSchema["properties"][bound]
+        schema = tool.input_schema["properties"][bound]
         assert schema["default"] is None
         assert {"type": "null"} in schema["anyOf"]

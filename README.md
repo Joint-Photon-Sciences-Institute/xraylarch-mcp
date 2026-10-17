@@ -8,6 +8,8 @@ MCP (Model Context Protocol) server that wraps [xraylarch](https://xraypy.github
 pip install xraylarch-mcp
 ```
 
+Requires Python 3.11 or newer. The server is built on version 2 of the MCP Python SDK (`mcp>=2`).
+
 ## Configuration
 
 ### Claude Desktop

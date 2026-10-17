@@ -146,7 +146,7 @@ xraylarch-mcp/
 │   └── xraylarch_mcp/
 │       ├── __init__.py
 │       ├── __main__.py          # Entry point: python -m xraylarch_mcp
-│       ├── server.py            # FastMCP server definition + tool registration
+│       ├── server.py            # MCPServer definition + tool registration
 │       ├── session.py           # Larch Interpreter session + Group state manager
 │       ├── tools/
 │       │   ├── __init__.py
@@ -360,10 +360,12 @@ When returning group info, don't dump raw numpy arrays. Return structured summar
 
 ### 3.5 Lifespan management
 
-Use FastMCP's lifespan to create the Interpreter once and share it:
+Use MCPServer's lifespan to create the Interpreter once and share it:
 
 ```python
 from contextlib import asynccontextmanager
+
+from mcp.server.mcpserver import MCPServer
 
 @asynccontextmanager
 async def larch_lifespan():
@@ -373,7 +375,7 @@ async def larch_lifespan():
     yield {"session": state}
     # cleanup
 
-mcp = FastMCP("xraylarch_mcp", lifespan=larch_lifespan)
+mcp = MCPServer("xraylarch_mcp", lifespan=larch_lifespan)
 ```
 
 ---
@@ -393,10 +395,10 @@ version = "0.1.0"
 description = "MCP server for X-ray spectroscopy analysis via xraylarch"
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "xraylarch",
-    "mcp[cli]",
+    "mcp[cli]>=2,<3",
     "numpy",
     "matplotlib",
 ]
@@ -463,5 +465,5 @@ git push -u origin main
 6. **Return actionable information.** Don't just return "success" — return the scientifically meaningful values (e0, edge_step, k-range, R-factor, etc.)
 7. **Naming convention**: All tool names start with `larch_` prefix.
 8. **Transport**: stdio only (local execution). No HTTP server needed.
-9. **Python >= 3.9** compatibility.
+9. **Python >= 3.11** (the current xraylarch needs it) and **mcp 2**: import from `mcp.server.mcpserver`; `mcp.server.fastmcp` no longer exists.
 10. **Do not hallucinate larch API calls.** If you can't verify a function exists via introspection, don't wrap it.

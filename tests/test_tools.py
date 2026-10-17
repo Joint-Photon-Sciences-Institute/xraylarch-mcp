@@ -219,6 +219,6 @@ def test_range_defaults_are_valid_json_schema(name):
     """JSON has no infinity: an unbounded default must be null, and null accepted."""
     tool = next(t for t in asyncio.run(mcp.list_tools()) if t.name == name)
     for bound in ("xmin", "xmax"):
-        schema = tool.inputSchema["properties"][bound]
+        schema = tool.input_schema["properties"][bound]
         assert schema["default"] is None
         assert {"type": "null"} in schema["anyOf"]

@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 from larch import Group
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 
 from ..session import SessionManager
 from ..util import format_error
@@ -16,7 +16,7 @@ def _get_session(ctx: Context) -> SessionManager:
     return ctx.request_context.lifespan_context["session"]
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.tool(name="larch_smooth")
     def larch_smooth(
         ctx: Context,

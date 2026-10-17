@@ -10,7 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 
 from ..session import SessionManager
 
@@ -91,7 +91,7 @@ def _get_plot_data(group: Any, plot_type: str, kweight: int = 2) -> tuple:
         )
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.tool(name="larch_plot")
     def larch_plot(
         ctx: Context,

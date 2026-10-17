@@ -349,7 +349,9 @@ def register(mcp: FastMCP) -> None:
             corrected mu), the normalization used, alpha, and the normalized
             peak height before and after. FLUO scales mu by
             alpha / (alpha + 1 - norm), so it fails where the normalized
-            spectrum reaches 1 + alpha; the tool then returns an error.
+            spectrum reaches 1 + alpha; the tool then returns an error, and
+            a warning when the spectrum comes close enough to more than
+            triple the peak.
         """
         session = _get_session(ctx)
         try:
@@ -449,6 +451,18 @@ def register(mcp: FastMCP) -> None:
                 result["note"] = (
                     f"Group '{group_id}' was not normalized, so it was normalized "
                     "with the default pre_edge settings first."
+                )
+            # Just below 1 + alpha the correction does not change sign but is
+            # still dominated by the singularity. Strong self-absorption raises
+            # a white line by up to about 2.5 times.
+            if result["norm_max_corrected"] > 3 * result["norm_max_before"]:
+                result["warning"] = (
+                    f"The correction raises the normalized peak from "
+                    f"{result['norm_max_before']:.3f} to {result['norm_max_corrected']:.3f}: "
+                    f"the spectrum comes within {1 + alpha - result['norm_max_before']:.3f} "
+                    f"of 1 + alpha = {1 + alpha:.3f}, where FLUO diverges, so the corrected "
+                    "spectrum is unreliable. Check the formula, elem, edge and line, and "
+                    "that this is fluorescence data."
                 )
             return result
 

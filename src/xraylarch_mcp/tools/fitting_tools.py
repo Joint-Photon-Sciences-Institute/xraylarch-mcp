@@ -186,15 +186,24 @@ def register(mcp: FastMCP) -> None:
         Each path needs a feffNNNN.dat file and parameters for S02, sigma2,
         deltar, and E0 shift.
 
+        Each path parameter is one of:
+            - a number, which fixes it;
+            - "guess:value", which makes a new fit variable named
+              <parameter>_<path index>, e.g. "s02_0" or "sigma2_1";
+            - an expression of those variables, which ties it to them. Shells
+              normally share S0^2 and E0, so give the first path "guess:"
+              values and the others "s02_0" and "e0_0". Expressions may also
+              use the path's reff, e.g. "deltar_0 * reff / 2.55".
+
         Args:
             group_id: ID of the data group with chi(k).
             paths: List of path configurations. Each is a dict with:
                 - "filename": path to feffNNNN.dat file
-                - "label": optional label for this path
-                - "s02": S0^2 amplitude factor (float or "guess:value")
-                - "sigma2": Debye-Waller factor (float or "guess:value")
-                - "deltar": path length change (float or "guess:value")
-                - "e0": energy shift (float or "guess:value")
+                - "label": optional label for this path, unique in the fit
+                - "s02": S0^2 amplitude factor
+                - "sigma2": Debye-Waller factor
+                - "deltar": path length change
+                - "e0": energy shift
                 - "degen": degeneracy override (optional)
             kmin: Minimum k for transform.
             kmax: Maximum k for transform.
@@ -216,6 +225,13 @@ def register(mcp: FastMCP) -> None:
 
         if not hasattr(group, "k") or not hasattr(group, "chi"):
             return {"error": f"Group '{group_id}' needs chi(k). Run larch_autobk first."}
+
+        # larch keys a dataset's paths by label, so a repeated label would
+        # silently drop all but one of those paths from the fit.
+        labels = [pconf.get("label", f"path_{i}") for i, pconf in enumerate(paths)]
+        repeated = sorted({label for label in labels if labels.count(label) > 1})
+        if repeated:
+            return {"error": f"Path labels must be unique; repeated: {', '.join(repeated)}"}
 
         try:
             from larch.fitting import param, param_group
@@ -261,7 +277,11 @@ def register(mcp: FastMCP) -> None:
                         params_dict[param_name] = param(guess_val, vary=True)
                         path_kwargs[pname] = param_name
                     else:
-                        path_kwargs[pname] = float(val)
+                        # a number, or an expression such as "s02_0"
+                        try:
+                            path_kwargs[pname] = float(val)
+                        except ValueError:
+                            path_kwargs[pname] = val
 
                 if pconf.get("degen") is not None:
                     path_kwargs["degen"] = float(pconf["degen"])

@@ -326,6 +326,7 @@ def register(mcp: FastMCP) -> None:
         formula: str,
         elem: str,
         edge: str = "K",
+        line: str | None = None,
         anginp: float = 45.0,
         angout: float = 45.0,
     ) -> dict:
@@ -338,13 +339,17 @@ def register(mcp: FastMCP) -> None:
             formula: Chemical formula of the sample (e.g., "FeO", "Fe2O3").
             elem: Absorbing element symbol (e.g., "Fe").
             edge: Absorption edge ("K", "L3", etc.). Default "K".
+            line: Detected fluorescence line ("Ka", "La", "Lb", ...). Default:
+                  "Ka" for a K edge, "La" for L3, "Lb" for L2 and L1.
             anginp: Incident beam angle in degrees. Default 45.
             angout: Exit beam angle in degrees. Default 45.
 
         Returns:
             The new group holding the corrected spectrum (its mu is the
-            corrected mu), the normalization used, and the normalized peak
-            height before and after.
+            corrected mu), the normalization used, alpha, and the normalized
+            peak height before and after. FLUO scales mu by
+            alpha / (alpha + 1 - norm), so it fails where the normalized
+            spectrum reaches 1 + alpha; the tool then returns an error.
         """
         session = _get_session(ctx)
         try:
@@ -355,14 +360,21 @@ def register(mcp: FastMCP) -> None:
         if not hasattr(group, "energy") or not hasattr(group, "mu"):
             return {"error": f"Group '{group_id}' needs energy and mu arrays."}
 
+        if line is None:
+            line = {"K": "Ka", "L3": "La", "L2": "Lb", "L1": "Lb"}.get(edge.upper())
+            if line is None:
+                return {"error": f"No default fluorescence line for the {edge} edge: set line."}
+
         try:
             from larch import Group
             from larch.xafs import fluo_corr, pre_edge
+            from larch.xray import material_mu, xray_edge, xray_line
 
             # fluo_corr looks for the group's normalization in
             # pre_edge_details.call_args, which pre_edge never sets, so it
             # would use its own ranges. Pass the group's ranges explicitly.
-            if not hasattr(group, "pre_edge_details"):
+            normalized_here = not hasattr(group, "pre_edge_details")
+            if normalized_here:
                 pre_edge(group)
             details = group.pre_edge_details
             normalization = {
@@ -381,26 +393,64 @@ def register(mcp: FastMCP) -> None:
                 elem,
                 group=group,
                 edge=edge,
+                line=line,
                 anginp=anginp,
                 angout=angout,
                 **normalization,
             )
 
+            # alpha as fluo_corr computes it, for the result and the check below
+            ang_corr = np.sin(max(1.0e-7, np.deg2rad(anginp))) / np.sin(
+                max(1.0e-7, np.deg2rad(angout))
+            )
+            e_edge = xray_edge(elem, edge).energy
+            mu_fluor, mu_below, mu_above = material_mu(
+                formula,
+                np.array([xray_line(elem, line).energy, e_edge - 10.0, e_edge + 10.0]),
+                density=1,
+            )
+            alpha = float((mu_fluor * ang_corr + mu_below) / (mu_above - mu_below))
+
+            # Where the normalized spectrum reaches 1 + alpha the correction
+            # factor alpha / (alpha + 1 - norm) passes through infinity and
+            # changes sign.
+            if not np.all(np.isfinite(group.mu_corr)) or np.any(group.mu_corr * group.mu < 0):
+                return {
+                    "error": (
+                        f"The FLUO correction diverges for '{group_id}': its normalized "
+                        f"spectrum reaches {float(group.norm.max()):.3f}, above "
+                        f"1 + alpha = {1 + alpha:.3f} for {formula}. In the FLUO model a "
+                        "self-absorbed fluorescence spectrum always stays below 1 + alpha, "
+                        "so check the formula, elem, edge and line, and that this is "
+                        "fluorescence data. Glitches above the edge can also cause it."
+                    )
+                }
+
             # larch writes mu_corr / norm_corr; the other tools read mu, so the
             # corrected spectrum goes into a group of its own.
-            corrected = Group(energy=group.energy.copy(), mu=group.mu_corr.copy())
+            corrected = Group(
+                energy=group.energy.copy(), mu=group.mu_corr.copy(), e0=float(group.e0)
+            )
             new_id = session.add_group(corrected, group_id=f"{group_id}_fluo_corr")
 
-            return {
+            result = {
                 "group_id": new_id,
                 "source_group_id": group_id,
                 "formula": formula,
                 "elem": elem,
                 "edge": edge,
+                "line": line,
+                "alpha": alpha,
                 "normalization": normalization,
                 "norm_max_before": float(group.norm.max()),
                 "norm_max_corrected": float(group.norm_corr.max()),
             }
+            if normalized_here:
+                result["note"] = (
+                    f"Group '{group_id}' was not normalized, so it was normalized "
+                    "with the default pre_edge settings first."
+                )
+            return result
 
         except Exception as e:
             return {"error": format_error("larch_fluo_corr", e)}
@@ -623,10 +673,13 @@ def register(mcp: FastMCP) -> None:
             rebin_xafs(group, **kwargs)
 
             # larch leaves the group's arrays alone and writes the result to
-            # group.rebinned, which the other tools cannot reach.
+            # group.rebinned, which the other tools cannot reach. delta_mu is
+            # the spread of mu within each bin (NaN for single-point bins).
             rebinned = Group(
                 energy=np.asarray(group.rebinned.energy, dtype=float),
                 mu=np.asarray(group.rebinned.mu, dtype=float),
+                delta_mu=np.asarray(group.rebinned.delta_mu, dtype=float),
+                e0=float(e0),
             )
             new_id = session.add_group(rebinned, group_id=f"{group_id}_rebinned")
 
